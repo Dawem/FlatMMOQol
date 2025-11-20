@@ -4,7 +4,7 @@ let isAutoPickupEnabled = false;
 
 let npcData = [];
 let fightingNpc = null;
-let itemsToPickup = [];
+let pickupRange = 3;
 
 const npcPanel = createPanel();
 npcPanel.style.top = "50%";
@@ -51,7 +51,9 @@ const initNpcPanel = () => {
     </div>
     ${html}
     <label for="itemIgnoreList" style="font-size:12px;font-weight:bold;"> Item Ignore List (comma separated)</label><br/>
-    <textarea id="itemIgnoreList" name="itemIgnoreList" rows="5" style="width:95%; margin-top:8px;margin-bottom:8px;padding:4px;"></textarea>
+    <textarea id="itemIgnoreList" name="itemIgnoreList" rows="5" style="width:95%; margin-top:8px;margin-bottom:8px;padding:4px;"></textarea><br/>
+    <label for="pickupRange" style="font-size:12px;font-weight:bold;"> Pickup Range (in tiles)</label><br/>
+    <input type="number" id="pickupRange" name="pickupRange" value="${pickupRange}" min="1" max="20" style="width:50px;margin-top:8px;margin-bottom:8px;padding:4px;" /><br/>
     <div>
       <input type="checkbox" id="autoPickupCheckbox" name="autoPickupCheckbox" checked />
       <label for="autoPickupCheckbox"> Auto Pickup Items</label>
@@ -80,6 +82,11 @@ const initNpcPanel = () => {
   autoPickupCheckbox.checked = isAutoPickupEnabled;
   autoPickupCheckbox.addEventListener("click", () => {
     isAutoPickupEnabled = autoPickupCheckbox.checked;
+  });
+
+  const pickupRangeInput = npcPanel.querySelector("#pickupRange");
+  pickupRangeInput.addEventListener("change", () => {
+    pickupRange = parseInt(pickupRangeInput.value);
   });
 
   const itemIgnoreListInput = npcPanel.querySelector("#itemIgnoreList");
@@ -139,21 +146,29 @@ const updateNpcData = () => {
   if (npcPanel.innerHTML === "" || npcPanel.querySelector("tbody").innerText === "") initNpcPanel();
 };
 
+
 const pickupLoop = () => {
   if (!isAutoPickupEnabled) {
     return;
   }
-  if (itemsToPickup.length === 0) {
-    itemsToPickup = [...ground_items];
-  }
+  const playerX = players[Globals.local_username].client_x / TILE_SIZE; 
+  const playerY = players[Globals.local_username].client_y / TILE_SIZE;
+  itemsToPickup = [...ground_items].filter((item) => Math.max(Math.abs(item.x-playerX), Math.abs(item.y-playerY)) <= pickupRange);
+  console.log("itemsToPickup", itemsToPickup);
+  console.log("groundItems", ground_items);
+
   const itemIgnoreListInput = document.getElementById("itemIgnoreList");
   const itemIgnoreList = itemIgnoreListInput
     ? itemIgnoreListInput.value.split(",").map((item) => item.trim().toLowerCase())
     : [];
-  const ground_item = itemsToPickup.shift();
-  if (ground_item && !itemIgnoreList.includes(ground_item.name.toLowerCase())) {
-    Globals.websocket.send("CLICKED_GROUND_ITEM=" + ground_item.uuid);
-  }
+
+  for (let i = 0; i < itemsToPickup.length; i++) {
+    const ground_item = itemsToPickup[i];
+    if (ground_item && !itemIgnoreList.includes(ground_item.name.toLowerCase())) {
+      Globals.websocket.send("CLICKED_GROUND_ITEM=" + ground_item.uuid);
+      itemsToPickup.splice(i, 1);
+    };
+  };
 };
 
 const npcLoop = () => {
@@ -163,8 +178,8 @@ const npcLoop = () => {
   const playerInCombat = players[Globals.local_username].in_combat_ticker > 0; // see if there's a websocket to use to exit combat
   const actionableObjects = npcData.filter((obj) => obj.enabled && !obj.inCombat && !obj.isHidden);
   const closestNpc = actionableObjects.reduce((closest, npc) => {
-    const playerX = players[Globals.local_username].x;
-    const playerY = players[Globals.local_username].y;
+    const playerX = parseInt(players[Globals.local_username].client_x / TILE_SIZE);
+    const playerY = parseInt(players[Globals.local_username].client_y / TILE_SIZE);
     const npcX = npc.x;
     const npcY = npc.y;
     const distance = Math.hypot(npcX - playerX, npcY - playerY);
