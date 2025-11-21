@@ -45,6 +45,7 @@
   doLoop(332, 692, pickupLoop);
   doLoop(453, 3235, mapObjectLoop);
   doLoop(530, 1284, npcLoop);
+  doLoop(521, 753, eatLoop);
   doLoop(1000, 1000, notificationLoop);
   makeDraggable(mapObjectPanel);
   makeDraggable(npcPanel);

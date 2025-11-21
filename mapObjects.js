@@ -14,7 +14,7 @@ const toggleMinimizeMapObjectsTable = (button) => {
 const initMapObjectPanel = () => {
   let html = /*html*/ `
     <div style="max-height:500px;overflow-y:auto;width:100%;">
-      <table style="width:100%; border-collapse: collapse;">`;
+      <table style="width:100%; border-collapse: collapse;margin-bottom:8px;border:1px solid #444;">`;
   html += /*html*/ ` 
         <thead>
           <tr>

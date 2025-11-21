@@ -1,10 +1,12 @@
 let isNpcsMinimized = true;
 let isNpcEnabled = false;
-let isAutoPickupEnabled = false;
+let isAutoPickupEnabled = true;
+let isAutoEatEnabled = true;
 
 let npcData = [];
 let fightingNpc = null;
-let pickupRange = 3;
+let pickupRange = localStorage.getItem("pickupRange") ?? 3;
+let healAmount = localStorage.getItem("healAmount") ?? 10;
 
 const npcPanel = createPanel();
 npcPanel.style.top = "50%";
@@ -16,7 +18,7 @@ const toggleMinimizeNpcTable = (button) => {
 const initNpcPanel = () => {
   let html = /*html*/ ` 
     <div style="max-height:400px;overflow-y:auto;width:100%;">
-      <table style="width:100%; border-collapse: collapse;">`;
+      <table style="width:100%; border-collapse: collapse;margin-bottom:8px;border:1px solid #444;">`;
   html += /*html*/ ` 
         <thead>
           <tr>
@@ -50,14 +52,21 @@ const initNpcPanel = () => {
       <span style="cursor:pointer;font-size:24px;float:right;" id="minimizeButton">${isNpcsMinimized ? ">" : "<"}</span>
     </div>
     ${html}
+    <label for="autoPickupCheckbox">Auto Pickup Items&nbsp;</label>
+    <input type="checkbox" id="autoPickupCheckbox" name="autoPickupCheckbox" checked />
+    <br/>
+    <label for="pickupRange" style="font-size:12px;font-weight:bold;">Pickup Range&nbsp;</label>
+    <input type="number" id="pickupRange" name="pickupRange" value="${pickupRange}" min="1" max="20" style="width:50px;margin-top:8px;margin-bottom:8px;padding:4px;" />
+    <br/>
     <label for="itemIgnoreList" style="font-size:12px;font-weight:bold;"> Item Ignore List (comma separated)</label><br/>
-    <textarea id="itemIgnoreList" name="itemIgnoreList" rows="5" style="width:95%; margin-top:8px;margin-bottom:8px;padding:4px;"></textarea><br/>
-    <label for="pickupRange" style="font-size:12px;font-weight:bold;"> Pickup Range (in tiles)</label><br/>
-    <input type="number" id="pickupRange" name="pickupRange" value="${pickupRange}" min="1" max="20" style="width:50px;margin-top:8px;margin-bottom:8px;padding:4px;" /><br/>
-    <div>
-      <input type="checkbox" id="autoPickupCheckbox" name="autoPickupCheckbox" checked />
-      <label for="autoPickupCheckbox"> Auto Pickup Items</label>
-    </div>
+    <textarea id="itemIgnoreList" name="itemIgnoreList" rows="5" style="width:95%; margin-top:8px;margin-bottom:8px;padding:4px;"></textarea>
+    <br/>
+    <label for="autoEatCheckbox"> Auto Eat</label>
+    <input type="checkbox" id="autoEatCheckbox" name="autoEatCheckbox" checked />
+    <br/>
+    <label for="healAmount" style="font-size:12px;font-weight:bold;">Heal Amount&nbsp;</label>
+    <input type="number" id="healAmount" name="healAmount" value="${healAmount}" min="1" max="100" style="width:50px;margin-top:8px;margin-bottom:8px;padding:4px;" />
+    <br/>
     `;
 
   npcData.forEach((obj) => {
@@ -87,13 +96,24 @@ const initNpcPanel = () => {
   const pickupRangeInput = npcPanel.querySelector("#pickupRange");
   pickupRangeInput.addEventListener("change", () => {
     pickupRange = parseInt(pickupRangeInput.value);
+    localStorage.setItem("pickupRange", pickupRange);
+  });
+
+  const autoEatCheckbox = npcPanel.querySelector("#autoEatCheckbox");
+  autoEatCheckbox.checked = isAutoEatEnabled;
+  autoEatCheckbox.addEventListener("click", () => {
+    isAutoEatEnabled = autoEatCheckbox.checked;
+    
+  });
+
+  const healAmountInput = npcPanel.querySelector("#healAmount");
+  healAmountInput.addEventListener("change", () => {
+    healAmount = parseInt(healAmountInput.value);
+    localStorage.setItem("healAmount", healAmount);
   });
 
   const itemIgnoreListInput = npcPanel.querySelector("#itemIgnoreList");
-  const savedIgnoreList = localStorage.getItem("itemIgnoreList");
-  if (savedIgnoreList) {
-    itemIgnoreListInput.value = savedIgnoreList;
-  }
+  itemIgnoreListInput.value = localStorage.getItem("itemIgnoreList") ?? "";
   itemIgnoreListInput.addEventListener("change", () => {
     localStorage.setItem("itemIgnoreList", itemIgnoreListInput.value);
   });
@@ -146,16 +166,15 @@ const updateNpcData = () => {
   if (npcPanel.innerHTML === "" || npcPanel.querySelector("tbody").innerText === "") initNpcPanel();
 };
 
-
 const pickupLoop = () => {
   if (!isAutoPickupEnabled) {
     return;
   }
-  const playerX = players[Globals.local_username].client_x / TILE_SIZE; 
-  const playerY = players[Globals.local_username].client_y / TILE_SIZE;
-  itemsToPickup = [...ground_items].filter((item) => Math.max(Math.abs(item.x-playerX), Math.abs(item.y-playerY)) <= pickupRange);
-  console.log("itemsToPickup", itemsToPickup);
-  console.log("groundItems", ground_items);
+  const playerX = parseInt(players[Globals.local_username].client_x / TILE_SIZE);
+  const playerY = parseInt(players[Globals.local_username].client_y / TILE_SIZE);
+  itemsToPickup = [...ground_items].filter(
+    (item) => Math.max(Math.abs(item.x - playerX), Math.abs(item.y - playerY)) <= pickupRange
+  );
 
   const itemIgnoreListInput = document.getElementById("itemIgnoreList");
   const itemIgnoreList = itemIgnoreListInput
@@ -167,8 +186,8 @@ const pickupLoop = () => {
     if (ground_item && !itemIgnoreList.includes(ground_item.name.toLowerCase())) {
       Globals.websocket.send("CLICKED_GROUND_ITEM=" + ground_item.uuid);
       itemsToPickup.splice(i, 1);
-    };
-  };
+    }
+  }
 };
 
 const npcLoop = () => {
@@ -196,6 +215,18 @@ const npcLoop = () => {
 
   if (fightingNpc && npcData.find((n) => n.uuid === fightingNpc.uuid)?.isHidden) {
     fightingNpc = null;
+  }
+};
+
+const eatLoop = () => {
+  if (!isAutoEatEnabled) {
+    return;
+  }
+  const playerHp = players[Globals.local_username].hp;
+  const playerMaxHp = players[Globals.local_username].max_hp;
+  const missingHpAmount = playerMaxHp - playerHp;
+  if (missingHpAmount > healAmount) {
+    Globals.websocket.send("SHORTCUT_KEY=F2");
   }
 };
 
